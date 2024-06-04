@@ -23,10 +23,11 @@ from omni.isaac.sensor import RotatingLidarPhysX, ContactSensor, LidarRtx
 
 import time
 
-import matplotlib
-matplotlib.use('Qt5Agg')
-import matplotlib.pyplot as plt # use to draw lidar[0] scan
+# import matplotlib
+# matplotlib.use('Qt5Agg')
+# import matplotlib.pyplot as plt # use to draw lidar[0] scan
 
+''' unused
 class RotatingLidar(RotatingLidarPhysX):
     def __init__(
         self,
@@ -49,20 +50,14 @@ class RotatingLidar(RotatingLidarPhysX):
         self._depth_buffer = np.zeros((self._hori_num, ), dtype=np.float32)
 
     def _data_acquisition_callback(self, step_size: float) -> None:
-        # self._current_frame["linear_depth"] = self._backend_utils.create_tensor_from_list(
-        #     self._depth_buffer, dtype="float32", device=self._device
-        # )
-        # return
         self._current_time += step_size
         self._number_of_physics_steps += 1
         if not self._pause:
             depth = self._lidar_sensor_interface.get_linear_depth_data(self.prim_path).reshape(-1)
-            # print("raw depth:", depth.shape)
-            # print("hori_num:", self.get_num_cols())
 
             if len(depth) > 0:
                 azimuth = self._lidar_sensor_interface.get_azimuth_data(self.prim_path)
-                # method 1
+
                 start_index = int(self._hori_num * (azimuth[0] - self._hori_start_angle) / (self._hori_fov * math.pi / 180))
             
                 if start_index + len(depth) > self._hori_num:
@@ -70,11 +65,6 @@ class RotatingLidar(RotatingLidarPhysX):
                     self._depth_buffer[:len(depth) - (self._hori_num - start_index)] = depth[self._hori_num - start_index:]
                 else:
                     self._depth_buffer[start_index:start_index + len(depth)] = depth
-
-                # method 2
-                # for depth_sample, azimuth_sample in zip(depth, azimuth):
-                #     index = int(self._hori_num * (azimuth_sample - self._hori_start_angle) / (self._hori_fov * math.pi / 180))
-                #     self._depth_buffer[index] = depth_sample
 
                 self._current_frame["linear_depth"] = self._backend_utils.create_tensor_from_list(
                     self._depth_buffer, dtype="float32", device=self._device
@@ -100,19 +90,14 @@ class LidarView:
             self._lidars.append(lidar)
         
     def get_observation(self):
-        # return torch.ones((512, 720), dtype=torch.float32, device="cuda")
-        # if self._lidars[0].get_current_frame()["linear_depth"] is None:
-        #     print("no lidar scan")
-        #     return torch.zeros((len(self._lidars), self._lidars[0].get_num_cols()), dtype=torch.float32, device=self._device)
         observations = None
         for lidar in self._lidars:
             if observations is None:
                 observations = lidar.get_current_frame()["linear_depth"].unsqueeze(-1)
             else:
                 observations = torch.cat((observations, lidar.get_current_frame()["linear_depth"].unsqueeze(-1)), dim=-1)
-        # print("lidar scan:", self._lidars[0].get_num_rows(), self._lidars[0].get_num_cols(), observations.shape)
-        # print("depth:", observations.T[0])
         return observations.T
+'''
 
 class RTXLidar(LidarRtx):
     def __init__(self, prim_path: str, name: Optional[str] = "RTXLidar") -> None:
@@ -123,9 +108,6 @@ class RTXLidar(LidarRtx):
         self._current_frame["linear_depth_data"] = self._backend_utils.create_tensor_from_list(
             self._current_frame["linear_depth_data"], dtype="float32", device=self._device
         )
-        # self._current_frame["azimuth"] = self._backend_utils.create_tensor_from_list(
-        #     self._current_frame["azimuth"], dtype="float32", device=self._device
-        # )
 
 class RTXLidarView:
     def __init__(self,
@@ -136,7 +118,6 @@ class RTXLidarView:
         for prim_path in prim_paths:
             lidar = RTXLidar(prim_path=prim_path)
             lidar.add_linear_depth_data_to_frame()
-            # lidar.add_azimuth_data_to_frame()
             # lidar.enable_visualization()
             lidar.initialize()
             self._lidars.append(lidar)
@@ -173,10 +154,7 @@ class ContactSensorView:
         self._contact_nums = np.zeros((len(self._contact_sensors), ), dtype=np.int32)
         
     def get_observation(self):
-        # print("contact sensor", self._contact_sensors[0]._contact_sensor_interface.get_sensor_reading(self._contact_sensors[0].prim_path).in_contact)
-        # return torch.zeros((512, ), dtype=torch.float32, device="cuda")
         for i in range(len(self._contact_sensors)):
-            # self._contact_nums[i] = len(self._contact_sensors[i].get_current_frame()["contacts"])
             readings = self._contact_sensors[i]._contact_sensor_interface.get_sensor_reading(self._contact_sensors[i].prim_path)
             if readings.is_valid and readings.in_contact:
                 self._contact_nums[i] = 1
@@ -198,7 +176,7 @@ class BarnTask(RLTask):
 
         RLTask.__init__(self, name, env)
 
-        plt.ion()
+        # plt.ion()
         return
     
     def update_config(self, sim_config):
@@ -225,7 +203,6 @@ class BarnTask(RLTask):
             name = "jackal",
             translation = np.array([-2.5, 2.5, 0.05]),
             orientation = np.array([0.707, 0, 0, 0.707]),
-			# scale = np.array([0.001, 0.001, 0.001]),
         )
         self._sim_config.apply_articulation_settings(
             "jackal", get_prim_at_path(jackal.prim_path), self._sim_config.parse_actor_config("jackal")
@@ -249,9 +226,9 @@ class BarnTask(RLTask):
             name = "contact_sensor",
         )
 
-    def get_world(self):
+    def get_world(self, world_index = 0):
         prim_path = self.default_zero_env_path + "/world"
-        add_reference_to_stage(self._world_usd.replace("%d", str(0)), prim_path)
+        add_reference_to_stage(self._world_usd.replace("%d", str(world_index)), prim_path)
         world = XFormPrim(
             prim_path = prim_path,
             name = "world",
@@ -259,7 +236,6 @@ class BarnTask(RLTask):
 
     def get_worlds(self):
         for index in range(0, self._num_envs):
-            # prim_path = f"/World/envs/env_{index}/world"
             prim_path = f"/World/worlds/world_{index}"
             add_reference_to_stage(self._world_usd.replace("%d", str(index)), prim_path)
             world = XFormPrim(
@@ -268,22 +244,13 @@ class BarnTask(RLTask):
                 translation = np.array(self._env_pos[index].cpu()),
             )
 
-    def replace_world(self):
-        stage = get_current_stage()
-        for index in range(1, self._num_envs):
-            stage.RemovePrim(f"/World/envs/env_{index}/world")
-            print(f"remove /World/envs/env_{index}/world")
-            # add_reference_to_stage(self._world_usd.replace("%d", str(index)), f"/World/envs/env_{index}/world")
-            # XFormPrim(
-            #     prim_path = f"/World/envs/env_{index}/world",
-            #     name = "world" + str(index),
-            # )
-
     def set_up_scene(self, scene) -> None:
         self.get_jackal()
-        # self.get_world()
+
+        # self.get_world(0) # uncomment to clone the world to each env
         super().set_up_scene(scene)
-        self.get_worlds()
+        self.get_worlds() # uncomment to set world_0, world_1, ... to each env
+
         self._jackals = ArticulationView(
             prim_paths_expr="/World/envs/.*/jackal", name="jackal_view", reset_xform_properties=False
         )
@@ -295,10 +262,6 @@ class BarnTask(RLTask):
         super().initialize_views(scene)
         if scene.object_exists("jackal_view"):
             scene.remove_object("jackal_view", registry_only=True)
-        if scene.object_exists("jackal_prim_view"):
-            scene.remove_object("jackal_prim_view", registry_only=True)
-        if scene.object_exists("world_view"):
-            scene.remove_object("world_view", registry_only=True)
         self._jackals = ArticulationView(
             prim_paths_expr="/World/envs/.*/jackal", name="jackal_view", reset_xform_properties=False
         )
@@ -308,7 +271,7 @@ class BarnTask(RLTask):
 
     def get_observations(self) -> dict:
         self._lidar_obs = self._lidars.get_observation()
-        # print("lidar_obs:", self._lidar_obs[0].shape)
+        # print("lidar[0] obs shape:", self._lidar_obs[0].shape)
         self._contact_obs = self._contact_sensors.get_observation()
 
         target_pos = torch.tensor(self._target_pos, dtype=torch.float32, device=self._device)
@@ -335,19 +298,18 @@ class BarnTask(RLTask):
 
         # print("error:", self._pos_err[0].tolist(), "euler:", (self._euler[0] * 180 / math.pi).tolist())
 
+        # plot lidar[0] scan
         # plt.clf()
         # plt.subplot(111, polar=True)
-        # # plt.scatter(self._lidars._lidars[0]._current_frame["azimuth"].cpu().numpy(), self._lidars._lidars[0]._current_frame["linear_depth_data"].cpu().numpy(), s=1)
-        # # plt.scatter(np.linspace(-3 * math.pi / 4, 3 * math.pi / 4, self._lidar_obs[0].shape[0]), self._lidar_obs[0].cpu().numpy(), s=1)
         # plt.scatter(np.linspace(0, 2 * math.pi, self._lidar_obs[0].shape[0]), self._lidar_obs[0].cpu().numpy(), s=1)
         # plt.scatter(self._pos_err.cpu().numpy()[0, 1], self._pos_err.cpu().numpy()[0, 0], c="r")
         # plt.pause(0.05)
 
+        # print lidar[0] scan
         # print("lidar_size:", self._lidars._lidars[0]._current_frame["linear_depth_data"].shape, self._lidars._lidars[0]._current_frame["azimuth"].shape)
-
         # print("lidar:", self._lidars._lidars[0]._current_frame["linear_depth_data"], self._lidars._lidars[0]._current_frame["azimuth"])
 
-        # return torch.zeros((self._num_envs, self._num_observations), dtype=torch.float32, device=self._device)
+        # return torch.zeros((self._num_envs, self._num_observations), dtype=torch.float32, device=self._device) # for testing
 
         obs = torch.cat(
             (
@@ -358,13 +320,12 @@ class BarnTask(RLTask):
             ),
             dim=-1,
         )
-        # print(self._contact_sensors.get_observation())
+
         self.obs_buf[:] = obs
         observations = {self._jackals.name: {"obs_buf": self.obs_buf}}
         return observations
     
     def pre_physics_step(self, actions) -> None:
-        # return
         if not self.world.is_playing():
             return
 
@@ -380,12 +341,6 @@ class BarnTask(RLTask):
         # actions = torch.zeros((self._num_envs, 2), dtype=torch.float32, device=self._device) # for testing
         # actions[:, 0] = 1
         # actions[:, 1] = 0.5
-
-        # speed = torch.zeros((self._jackals.count, 4), dtype=torch.float32, device=self._device)
-        # speed[:, self._lf_dof_idx] = actions[:, 0] * self._max_vel_forward - actions[:, 1] * self._max_vel_spin
-        # speed[:, self._lr_dof_idx] = speed[:, self._lf_dof_idx]
-        # speed[:, self._rf_dof_idx] = actions[:, 0] * self._max_vel_forward + actions[:, 1] * self._max_vel_spin
-        # speed[:, self._rr_dof_idx] = speed[:, self._rf_dof_idx]
 
         speed = torch.cat(
             (
@@ -419,7 +374,7 @@ class BarnTask(RLTask):
 
     def post_reset(self):
         self._lf_dof_idx = self._jackals.get_dof_index("front_left_wheel_joint")
-        self._rf_dof_idx = self._jackals.get_dof_index("front_right_wheel_joint")           
+        self._rf_dof_idx = self._jackals.get_dof_index("front_right_wheel_joint")
         self._lr_dof_idx = self._jackals.get_dof_index("rear_left_wheel_joint")
         self._rr_dof_idx = self._jackals.get_dof_index("rear_right_wheel_joint")
 
@@ -432,21 +387,17 @@ class BarnTask(RLTask):
         self.reset_idx(indices)
 
     def calculate_metrics(self) -> None:
-        # return
-        rewards = -self._pos_err_diff[:, 0] * 0.1
-        rewards = rewards - self._pos_err_diff[:, 0] * 0.02
+        rewards = - self._pos_err_diff[:, 0] * 0.1 # - self._pos_err_diff[:, 1] * 0.05
         rewards = rewards + torch.clip(self._last_action[:, 0], -1, 0) * 0.01
         rewards = torch.where(self._contact_obs > 0, -0.2, rewards)
         rewards = torch.where((torch.abs(self._euler[:, 0]) > math.pi / 6) | (torch.abs(self._euler[:, 1]) > math.pi / 6), -0.2, rewards)
         rewards = torch.where(self._pos_err[:, 0] < 1, 1, rewards)
         rewards = rewards - 0.001
-        # rewards = torch.where((torch.abs(self._euler[:, 0]) > math.pi / 6) | (torch.abs(self._euler[:, 1]) > math.pi / 6), -10, rewards)
-        # resets = torch.where(self.progress_buf >= self._max_episode_length, -10, resets)
+        # resets = torch.where(self.progress_buf >= self._max_episode_length, -0.2, resets)
         # print("reward:", rewards[0].item())
         self.rew_buf[:] = rewards
 
     def is_done(self) -> None:
-        # return
         resets = torch.where(self._contact_obs > 0, 1, 0)
         resets = torch.where(self._pos_err[:, 0] < 1, 1, resets)
         resets = torch.where((torch.abs(self._euler[:, 0]) > math.pi / 6) | (torch.abs(self._euler[:, 1]) > math.pi / 6), 1, resets)
